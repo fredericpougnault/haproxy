@@ -1,0 +1,62 @@
+i# haproxy.cfg
+
+global
+    maxconn 4096
+        tune.ssl.default-dh-param 2048
+	    tune.bufsize 32768
+	        #tune.bufsize 163840
+
+    ssl-default-bind-ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+        ssl-default-bind-options no-sslv3 no-tlsv10 no-tlsv11
+	    ssl-default-server-ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+	        ssl-default-server-options no-sslv3 no-tlsv10 no-tlsv11
+
+    # launch 7 process
+        # process 1 for plain routing
+	    # process 2-7 for SSL
+	        nbproc 4
+
+defaults
+    log     global
+        option  log-health-checks
+	    option  log-separate-errors
+	        option  dontlognull
+		    option  httplog
+		        option  splice-auto
+			    option  socket-stats
+			        retries 3
+				    option  redispatch
+				        maxconn 10000
+
+    mode http
+        option http-keep-alive
+	    #option http-server-close
+	    	    option forwardfor
+		        timeout connect 5s
+			    timeout client 50s
+			        timeout server 50s
+				    timeout http-keep-alive 300s
+				        compression algo gzip
+						    compression type text/html text/plain text/xml text/css text/javascript application/javascript application/json text/json
+
+userlist UsersFor_Couchdb
+    user couchdb insecure-password couchdbpassword
+
+frontend http-in
+    bind *:80  tfo
+        bind *:443 tfo ssl crt /etc/ssl/haproxy-ssl.pem ciphers EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH alpn h2,http/1.1
+	    mode http
+	        rspadd Strict-Transport-Security:\ max-age=31536000;\ includeSubDomains
+		    default_backend couchdb_backend
+		        acl AuthOkay_Couchdb http_auth(UsersFor_Couchdb)
+			    http-request auth realm Couchdb if !AuthOkay_Couchdb
+
+backend couchdb_backend
+    #option httpclose
+        option forwardfor
+	    http-request set-header X-Forwarded-Port %[dst_port]
+	        http-request add-header X-Forwarded-Proto https if { ssl_fc }
+		    http-request del-header Authorization
+		        option httpchk HEAD / HTTP/1.1\r\nHost:localhost
+			    server couch01 couchdb:5984 check inter 1000
+			    

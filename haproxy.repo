@@ -1,0 +1,6 @@
+[Haproxy]
+name=haproxy
+baseurl = http://au1.mirror.crc.id.au/repo/el7-extra/x86_64/
+gpgkey = http://au1.mirror.crc.id.au/repo/RPM-GPG-KEY-kernel-xen
+enabled = 1
+gpgcheck = 1
